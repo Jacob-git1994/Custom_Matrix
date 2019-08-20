@@ -2,6 +2,8 @@
 #include <iostream>
 #include <stdlib.h>
 #include <cmath>
+#include <iomanip>
+#include <complex>
 
 namespace nicole
 {	
@@ -92,6 +94,7 @@ namespace nicole
 		unsigned int numel(void) const;
 		matrix<T> vectorize(void);
 		matrix<T> vectorize(unsigned int);
+		matrix<T> & fill(T);
 		/*Operations of chunks of vector or matrix >> doesnt support autominius functions*/
 		matrix<T> & for_col(unsigned int,T (*)(T));
 		matrix<T> & for_row(unsigned int,T (*)(T));
@@ -110,6 +113,7 @@ namespace nicole
 		matrix<T> get_row_range(unsigned int,unsigned int,unsigned int);
 		matrix<T> get_col_range(unsigned int,unsigned int,unsigned int);
 		matrix<T> diag(void);
+		unsigned int is_in(T);
 		unsigned int is_square(void) const;
 		unsigned int is_vector(void) const;
 		unsigned int is_row_vector(void) const;
@@ -123,6 +127,8 @@ namespace nicole
 		template<class U> friend U mean(const matrix<U>&);
 		template<class U> friend U var(const matrix<U>&);
 		template<class U> friend U sd(const matrix<U>&);
+		template<class U> friend matrix<U> cov(const matrix<U>&,const matrix<U>&);
+		template<class U> friend matrix<U> cov(const matrix<U>&);
 		template<class U> friend U max(const matrix<U>&);
 		template<class U> friend U min(const matrix<U>&);
 		/*Functions to generate permutations forming matrix obects*/
@@ -180,6 +186,17 @@ namespace nicole
 		matrix<T> operator()(const matrix<unsigned int>&); /*Vectorizes due to some issues when reconstructing matrix*/
 		/*Turns the matrix into a matrix with index values*/
 		matrix<unsigned int> find(const matrix<unsigned int>&);
+		/*Set rows/cols/chuncks of the matrix*/
+		matrix<T> & set_col(unsigned int,const matrix<T>&);
+		matrix<T> & set_row(unsigned int,const matrix<T>&);
+		
+		/*ADD IN THIS CODE if needed*/
+		///////////////////////////////////////////////////////////////////////////////////////////////////////////
+		/*Set rows/cols/chuncks of the matrix*/
+		matrix<T> & set_col_range(unsigned int,unsigned int,unsigned int,const matrix<T>&);
+		matrix<T> & set_row_range(unsigned int,unsigned int,unsigned int,const matrix<T>&);
+		matrix<T> & set_chunk(unsigned int,unsigned int,unsigned int,unsigned int,const matrix<T>&);
+		//////////////////////////////////////////////////////////////////////////////////////////////////////////
 	};
 	
 	/*Constructors*/
@@ -220,7 +237,7 @@ namespace nicole
 		col = size;
 		data = new T[size*size];
 		if(!data) {std::cout << "Runtime Error\nCannot allocate memory\n"; delete[] data; exit(1);} else {}
-#pragma omp parallel for simd
+
 		for(int i = 0; i < size*size; i++)
 		{
 			data[i] = dat[i];
@@ -235,7 +252,7 @@ namespace nicole
 		col = c;
 		data = new T[r*c];
 		if(!data) {std::cout << "Runtime Error\nCannot allocate memory\n"; delete[] data; exit(1);} else {}
-#pragma omp parallel for simd
+
 		for(int i = 0; i < r*c; i++)
 		{
 			data[i] = dat[i];
@@ -249,7 +266,7 @@ namespace nicole
 		col = mat.col;
 		data = new T[row*col];
 		if(!data) {std::cout << "Runtime Error\nCannot allocate memory\n"; delete[] data; exit(1);} else {}
-#pragma omp parallel for simd
+
 		for(int i = 0; i < row*col; i++)
 		{
 			data[i] = mat.data[i];
@@ -279,9 +296,10 @@ namespace nicole
 		s << "\n";
 		for(int i = 0; i < mat.row; i++)
 		{
+			s << " ";
 			for(int j = 0; j < mat.col; j++)
 			{
-				s << mat.data[i*mat.col + j] << " ";
+                s << std::setprecision(5) << std::setw(9) << mat.data[i*mat.col + j] << " ";
 			}
 			s << "\n";
 		}
@@ -291,6 +309,7 @@ namespace nicole
 	
 	/*Indexing*/
 	template<class T>
+	inline
 	unsigned int matrix<T>::if_in(unsigned int size)
 	{
 		if(size < 0 || size >= row*col) {std::cout << "Runtime Error\nIndex out of bounds\n"; exit(1);} else {}
@@ -298,6 +317,7 @@ namespace nicole
 	}
 	
 	template<class T>
+	inline
 	unsigned int matrix<T>::if_in(unsigned int r,unsigned int c)
 	{
 		if (r >= row || c >= col || r < 0 || c < 0) {std::cout << "Runtime Error\nIndex out of bounds\n"; exit(1);} else {}
@@ -305,6 +325,7 @@ namespace nicole
 	}
 
 	template<class T>
+	inline
 	T & matrix<T>::operator()(unsigned int loc)
 	{
 		if(row == 1)
@@ -322,6 +343,7 @@ namespace nicole
 	}
 	
 	template<class T>
+	inline
 	T & matrix<T>::operator()(unsigned int r,unsigned int c)
 	{
 		return data[if_in(r,c)];
@@ -330,6 +352,7 @@ namespace nicole
 	/*Read only operation for const matrix*/
 	
 	template<class T>
+	inline
 	T matrix<T>::operator()(unsigned int loc) const
 	{
 		if(row == 1)
@@ -349,6 +372,7 @@ namespace nicole
 	}
 	
 	template<class T>
+	inline
 	T matrix<T>::operator()(unsigned int r,unsigned int c) const
 	{
 		if((r*col + c) >= row*col) {std::cout << "Runtime Error\nIndex out of bounds\n"; exit(1);} else {}
@@ -357,6 +381,7 @@ namespace nicole
 	
 	/*Read only indexing*/
 	template<class T>
+	inline
 	T matrix<T>::at(unsigned int loc) const
 	{
 		if(row == 1)
@@ -374,8 +399,9 @@ namespace nicole
 			std::cout << "Runtime Error\nPlease use matrix indexing m(i,j)\n"; exit(1);
 		}
 	}
-	
+    
 	template<class T>
+	inline
 	T matrix<T>::at(const unsigned int r,const unsigned int c) const 
 	{
 		if((r*col + c) >= row*col) {std::cout << "Runtime Error\nIndex out of bounds\n"; exit(1);} else {}
@@ -394,7 +420,6 @@ namespace nicole
 			data = new T[row*col];
 			if(!data) {std::cout << "Runtime Error\nCannot allocate memeory\n"; delete[] data; exit(1);} else {}
 			
-#pragma omp parallel for simd
 			for(int i = 0; i < row*col; i++)
 			{
 				data[i] = mat.data[i];
@@ -404,7 +429,7 @@ namespace nicole
 		{
 			row = mat.row;
 			col = mat.col;
-#pragma omp parallel for simd
+
 			for(int i = 0; i < row*col; i++)
 			{
 				data[i] = mat.data[i];
@@ -439,7 +464,7 @@ namespace nicole
 	matrix<T> & matrix<T>::operator+=(const matrix<T> &mat)
 	{
 		if((row != mat.row) || (col != mat.col)) {std::cout << "Runtime Error\nMatricies not the same size\n"; exit(1);} else {}
-#pragma omp parallel for simd
+
 		for(int i = 0; i < row*col; i++)
 		{
 			data[i] += mat.data[i];
@@ -451,7 +476,7 @@ namespace nicole
 	matrix<T> & matrix<T>::operator-=(const matrix<T> &mat)
 	{
 		if((row != mat.row) || (col != mat.col)) {std::cout << "Runtime Error\nMatricies not the same size\n"; exit(1);} else {}
-#pragma omp parallel for simd
+
 		for(int i = 0; i < row*col; i++)
 		{
 			data[i] -= mat.data[i];
@@ -462,7 +487,6 @@ namespace nicole
 	template<class T>
 	matrix<T> & matrix<T>::operator*=(T alpha)
 	{
-#pragma omp parallel for simd
 		for(int i = 0; i < row*col; i++)
 		{
 			data[i] *= alpha;
@@ -474,7 +498,7 @@ namespace nicole
 	matrix<T> & matrix<T>::operator/=(T alpha)
 	{
 		if(alpha == (T) 0.0) {std::cout << "Runtime Error\nCannot divide by zero\n"; exit(1);} else {}
-#pragma omp parallel for simd
+
 		for(int i = 0; i < row*col; i++)
 		{
 			data[i] /= alpha;
@@ -486,7 +510,7 @@ namespace nicole
 	matrix<T> & matrix<T>::operator&&(const matrix<T> &mat)
 	{
 		if((row != mat.row) || (col != mat.col)) {std::cout << "Runtime Error\nMatricies not the same size\n"; exit(1);} else {}
-#pragma omp parallel for simd
+
 		for(int i = 0; i < row*col; i++)
 		{
 			data[i] *= mat.data[i];
@@ -498,7 +522,7 @@ namespace nicole
 	matrix<T> & matrix<T>::operator||(const matrix<T> &mat)
 	{
 		if((row != mat.row) || (col != mat.col)) {std::cout << "Runtime Error\nMatricies not the same size\n"; exit(1);} else {}
-#pragma omp parallel for simd
+
 		for(int i = 0; i < row*col; i++)
 		{
 			data[i] /= mat.data[i];
@@ -511,7 +535,7 @@ namespace nicole
 	matrix<U> operator-(const matrix<U> &mat)
 	{
 		matrix<U> sol = mat;
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] *= (U) -1.0;
@@ -524,7 +548,7 @@ namespace nicole
 	{
 		if(mat1.row != mat2.row || mat1.col != mat2.col) {std::cout << "Runtime Error\nMatricies not the same size\n"; exit(1);} else {}
 		matrix<U> sol(mat1.row,mat1.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat1.row*mat2.col; i++)
 		{
 			sol.data[i] = mat1.data[i] - mat2.data[i];
@@ -537,7 +561,7 @@ namespace nicole
 	{
 		if(mat1.row != mat2.row || mat1.col != mat2.col) {std::cout << "Runtime Error\nMatricies not the same size\n"; exit(1);} else {}
 		matrix<U> sol(mat1.row,mat1.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat1.row*mat1.col; i++)
 		{
 			sol.data[i] = mat1.data[i] + mat2.data[i];
@@ -549,7 +573,7 @@ namespace nicole
 	matrix<U> operator*(U alpha,const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = alpha*mat.data[i];
@@ -561,7 +585,7 @@ namespace nicole
 	matrix<U> operator*(const matrix<U> &mat,U alpha)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = alpha*mat.data[i];
@@ -573,7 +597,7 @@ namespace nicole
 	matrix<U> operator/(U alpha,const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = alpha/mat.data[i];
@@ -585,7 +609,7 @@ namespace nicole
 	matrix<U> operator/(const matrix<U> &mat,U alpha)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = mat.data[i]/alpha;
@@ -598,7 +622,7 @@ namespace nicole
 	{
 		if(mat1.row != mat2.row || mat1.col != mat2.col) {std::cout << "Runtime Error\nMatricies not the same size\n"; exit(1);} else {}
 		matrix<U> sol(mat1.row,mat2.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat1.row*mat2.col; i++)
 		{
 			sol.data[i] = mat1.data[i]*mat2.data[i];
@@ -611,7 +635,7 @@ namespace nicole
 	{
 		if(mat1.row != mat2.row || mat1.col != mat2.col) {std::cout << "Runtime Error\nMatricies not the same size\n"; exit(1);} else {}
 		matrix<U> sol(mat1.row,mat2.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat1.row*mat2.col; i++)
 		{
 			sol.data[i] = mat1.data[i]/mat2.data[i];
@@ -624,7 +648,7 @@ namespace nicole
 	matrix<U> matrix<U>::zeros(unsigned int size)
 	{
 		matrix<U> sol(size);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < size*size; i++)
 		{
 			sol.data[i] = (U) 0.0;
@@ -636,7 +660,7 @@ namespace nicole
 	matrix<U> matrix<U>::zeros(unsigned int r,unsigned int c)
 	{
 		matrix<U> sol(r,c);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < r*c; i++)
 		{
 			sol.data[i] = (U) 0.0;
@@ -648,7 +672,7 @@ namespace nicole
 	matrix<U> matrix<U>::ones(unsigned int size)
 	{
 		matrix<U> sol(size);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < size*size; i++)
 		{
 			sol.data[i] = (U) 1.0;
@@ -660,7 +684,7 @@ namespace nicole
 	matrix<U> matrix<U>::ones(unsigned int r,unsigned int c)
 	{
 		matrix<U> sol(r,c);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < r*c; i++)
 		{
 			sol.data[i] = (U) 1.0;
@@ -687,7 +711,7 @@ namespace nicole
 	matrix<U> matrix<U>::randu(unsigned int size)
 	{
 		matrix<U> sol(size);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < size*size; i++)
 		{
 			sol.data[i] = (U) (double)rand()/(double)RAND_MAX;
@@ -699,7 +723,7 @@ namespace nicole
 	matrix<U> matrix<U>::randu(unsigned int r,unsigned int c)
 	{
 		matrix<U> sol(r,c);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < r*c; i++)
 		{
 			sol.data[i] = (U) (double)rand()/(double)RAND_MAX;
@@ -711,7 +735,7 @@ namespace nicole
 	matrix<U> matrix<U>::randu(double a,double b,unsigned int size)
 	{
 		matrix<U> sol(size);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < size*size; i++)
 		{
 			sol.data[i] = (U) ((b-a)*(double)rand()/(double)RAND_MAX + a);
@@ -723,7 +747,7 @@ namespace nicole
 	matrix<U> matrix<U>::randu(double a,double b,unsigned int r,unsigned int c)
 	{
 		matrix<U> sol(r,c);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < r*c; i++)
 		{
 			sol.data[i] = (U) ((b-a)*(double)rand()/(double)RAND_MAX + a);
@@ -735,7 +759,7 @@ namespace nicole
 	matrix<U> matrix<U>::eye(unsigned int size)
 	{
 		matrix<U> sol = matrix<U>::zeros(size);
-#pragma omp parallel for simd
+ 
 		for(int i = 0; i < size; i++)
 		{
 			sol.data[i*size + i] = (U) 1.0;
@@ -783,7 +807,7 @@ namespace nicole
 	matrix<T> matrix<T>::randn(unsigned int N)
 	{
 		matrix<T> sol(N);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < sol.row*sol.col; ++i)
 		{
 			double V = (double) (((double)2)*(double)rand()/(double)RAND_MAX - (double)1);
@@ -805,7 +829,7 @@ namespace nicole
 	matrix<T> matrix<T>::randn(unsigned int r,unsigned int c)
 	{
 		matrix<T> sol(r,c);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < sol.row*sol.col; ++i)
 		{
 			double V = (double) (((double)2)*(double)rand()/(double)RAND_MAX - (double)1);
@@ -827,7 +851,7 @@ namespace nicole
 	matrix<T> matrix<T>::randn(double mu,double var,unsigned int N)
 	{
 		matrix<T> sol(N);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < sol.row*sol.col; ++i)
 		{
 			double V = (double) (((double)2)*(double)rand()/(double)RAND_MAX - (double)1);
@@ -849,7 +873,7 @@ namespace nicole
 	matrix<T> matrix<T>::randn(double mu,double var,unsigned int r,unsigned int c)
 	{
 		matrix<T> sol(r,c);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < sol.row*sol.col; ++i)
 		{
 			double V = (double) (((double)2)*(double)rand()/(double)RAND_MAX - (double)1);
@@ -883,7 +907,7 @@ namespace nicole
 	matrix<T> matrix<T>::t(void)
 	{
 		matrix<T> trans(col,row);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < row; i++)
 		{
 			for(int j = 0; j < col; j++)
@@ -899,7 +923,7 @@ namespace nicole
 	matrix<T> matrix<T>::t(void) const
 	{
 		matrix<T> trans(col,row);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < row; i++)
 		{
 			for(int j = 0; j < col; j++)
@@ -916,14 +940,13 @@ namespace nicole
 		if(mat1.col != mat2.col) {std::cout << "Runtime Error\nUnequal columns\n"; exit(1);} else {}
 		matrix<U> sol(mat1.row+mat2.row,mat1.col);
 		
-#pragma omp parallel for simd
 		for(int i = 0; i < mat1.row*mat1.col; i++)
 		{
 			sol.data[i] = mat1.data[i];
 		}
 		
 		int position = mat1.row*mat1.col;
-#pragma omp parallel for simd 
+
 		for(int i = 0; i < mat2.row*mat2.col; i++)
 		{
 			sol.data[i + position] = mat2.data[i];
@@ -940,18 +963,21 @@ namespace nicole
 	}
 	
 	template<class T>
+	inline
 	unsigned int matrix<T>::rows(void) const
 	{
 		return row;
 	}
 	
 	template<class T>
+	inline
 	unsigned int matrix<T>::cols(void) const
 	{
 		return col;
 	}
 	
 	template<class T>
+	inline
 	unsigned int matrix<T>::numel(void) const 
 	{
 		return col*row;
@@ -963,12 +989,22 @@ namespace nicole
 		matrix<T> sol(row*col,1);
 		sol.row = row*col;
 		sol.col = 1;
-#pragma omp parallel for simd
+
 		for(int i = 0; i < row*col; i++)
 		{
 			sol.data[i] = data[i];
 		}
 		return sol;
+	}
+	
+	template<class T>
+	matrix<T> & matrix<T>::fill(T alpha)
+	{
+		for(int i = 0; i < row*col; i++)
+		{
+			data[i] = alpha;
+		}
+		return *this;
 	}
 
 	template<class T>
@@ -979,7 +1015,7 @@ namespace nicole
 			matrix<T> sol(row*col,1);
 			sol.row = row*col;
 			sol.col = 1;
-#pragma omp parallel for simd
+
 			for(int i = 0; i < row*col; i++)
 			{
 				sol.data[i] = data[i];
@@ -991,7 +1027,7 @@ namespace nicole
 			matrix<T> sol(1,row*col);
 			sol.col = row*col;
 			sol.row = 1;
-#pragma omp parallel for simd
+
 			for(int i = 0; i < row*col; i++)
 			{
 				sol.data[i] = data[i];
@@ -1008,7 +1044,7 @@ namespace nicole
 	matrix<T> & matrix<T>::for_row(unsigned int r,T (*f)(T))
 	{
 		if(r >= row || r < 0) {std::cout << "Runtime Error\nIndex out of bounds\n"; exit(1);} else {}
-#pragma omp parallel for simd
+
 		for(int j = 0; j < col; j++)
 		{
 			data[r*col + j] = f(data[r*col + j]);
@@ -1020,7 +1056,7 @@ namespace nicole
 	matrix<T> & matrix<T>::for_col(unsigned int c,T (*f)(T))
 	{
 		if(c >= col || c < 0) {std::cout << "Runtime Error\nIndex out of bounds\n"; exit(1);} else {}
-#pragma omp parallel for simd
+
 		for(int i = 0; i < row; i++)
 		{
 			data[i*col + c] = f(data[i*col + c]);
@@ -1034,7 +1070,6 @@ namespace nicole
 		if(c >= col || c < 0 || a >= row || a < 0 || b >= row || b < 0) {std::cout << "Runtime Error\nIndex out of range\n"; exit(1);}
 		if(b < a) {unsigned int temp = a; a = b; a = b; b = temp;} else {/*Do nothing*/}
 		
-#pragma omp parallel for simd
 		for(int i = a; i <=b; i++)
 		{
 			data[i*col + c] = f(data[i*col + c]);
@@ -1048,7 +1083,7 @@ namespace nicole
 		if(r >= row || r < 0 || a >= col || a < 0 || b >= col || b < 0) {std::cout << "Runtime Error\nIndex out of range\n"; exit(1);}
 		if(b < a) {unsigned int temp = a; a = b; a = b; b = temp;} else {/*Do nothing*/}
 		
-#pragma omp parallel for simd
+#pragma omp parallel for
 		for(int i = a; i<=b; i++)
 		{
 			data[r*col + i] = f(data[r*col + i]);
@@ -1059,7 +1094,6 @@ namespace nicole
 	template<class T>
 	matrix<T> & matrix<T>::for_all(T (*f)(T))
 	{
-#pragma omp parallel for simd
 		for(int i = 0; i < row*col; i++)
 		{
 			data[i] = f(data[i]);
@@ -1075,13 +1109,12 @@ namespace nicole
 		T *temp2 = new T[col];
 		if(!temp || !temp2) {std::cout << "Runtime Error\nCannot allocate memory\n";delete[] temp,temp2; exit(1);} else {}
 		
-#pragma omp parallel for simd
 		for(int j = 0; j < col; j++)
 		{
 			temp[j] = data[r1*col + j];
 			temp2[j] = data[r2*col + j];
 		}
-#pragma omp parallel for simd
+
 		for(int j = 0; j < col; j++)
 		{
 			data[r1*col + j] = temp2[j];
@@ -1099,13 +1132,12 @@ namespace nicole
 		T *temp2 = new T[row];
 		if(!temp || !temp2) {std::cout << "Runtime Error\nCannot allocate memory\n";delete[] temp,temp2; exit(1);} else {}
 		
-#pragma omp parallel for simd
 		for(int i = 0; i < row; i++)
 		{
 			temp[i] = data[i*col + c1];
 			temp2[i] = data[i*col + c2];
 		}
-#pragma omp parallel for simd
+
 		for(int i = 0; i < row; i++)
 		{
 			data[i*col + c1] = temp2[i];
@@ -1122,7 +1154,6 @@ namespace nicole
 		if(r >= row || r < 0) {std::cout << "Runtime Error\nIndex out of bounds\n"; exit(1);} else {}
 		matrix<T> sol(1,col);
 		
-#pragma omp parallel for simd
 		for(int i = 0; i < col; i++)
 		{
 			sol.data[i] = data[r*col + i];
@@ -1136,7 +1167,6 @@ namespace nicole
 		if(c >= col || c < 0) {std::cout << "Runtime Error\nIndex out of bounds\n"; exit(1);} else {}
 		matrix<T> sol(row,1);
 		
-#pragma omp parallel for simd
 		for(int i = 0; i < row; i++)
 		{
 			sol.data[i] = data[i*col + c];
@@ -1151,7 +1181,7 @@ namespace nicole
 		if(b < a) {unsigned int temp = b; b = a; a = temp;} else {} /*Swaps the range if it is invalid*/
 		matrix<T> sol(1,b-a + 1);
 		int j = 0;
-#pragma omp for simd
+#pragma omp for
 		for(int i = a; i <= b; i++)
 		{
 			sol.data[j++] = data[r*col + i];
@@ -1166,7 +1196,7 @@ namespace nicole
 		if(b < a) {unsigned int temp = b; b = a; a = temp;} else {} /*Swaps the range if it is invalid*/
 		matrix<T> sol(b-a+1,1);
 		int j = 0;
-#pragma omp for simd
+#pragma omp for
 		for(int i = a; i <= b; i++)
 		{
 			sol.data[j++] = data[i*col + c];
@@ -1179,7 +1209,7 @@ namespace nicole
 	{
 		if(row != col) {std::cout << "Runtime Error\nMatrix must be square\n"; exit(1);} else {}
 		matrix<T> d(row,1);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < row; i++)
 		{
 			d.data[i] = data[i*col + i];
@@ -1187,8 +1217,20 @@ namespace nicole
 		return d;
 	}
 	
+	template<class T>
+	unsigned int matrix<T>::is_in(T alpha)
+	{
+		for(int i = 0; i < row*col; i++)
+		{
+			if(data[i] == alpha) {return 1;}
+			else {continue;}
+		}
+		return 0;
+	}
+	
 	/*Boolean tests for the shape*/
 	template<class T>
+	inline
 	unsigned int matrix<T>::is_square(void) const
 	{
 		if(row == col) {return 1;}
@@ -1197,6 +1239,7 @@ namespace nicole
 	}
 	
 	template<class T>
+	inline
 	unsigned int matrix<T>::is_vector(void) const
 	{
 		if(row == 1 || col == 1) {return 1;}
@@ -1205,6 +1248,7 @@ namespace nicole
 	}
 	
 	template<class T>
+	inline
 	unsigned int matrix<T>::is_row_vector(void) const
 	{
 		if(row == 1) {return 1;}
@@ -1213,6 +1257,7 @@ namespace nicole
 	}
 	
 	template<class T>
+	inline
 	unsigned int matrix<T>::is_col_vector(void) const
 	{
 		if(col == 1) {return 1;}
@@ -1223,23 +1268,19 @@ namespace nicole
 	/*Matrix Multiplication*/
 	template<class U>
 	matrix<U> operator*(const matrix<U> &mat1,const matrix<U> &mat2)
-	{
+	{	
 		if(mat1.col != mat2.row) {std::cout << "Runtime Error\nMatrix not equivlent\n"; exit(1);} else {}
-		matrix<U> sol(mat1.row,mat2.col);
-		unsigned int mat_1_row = mat1.row;
-		unsigned int mat_1_col = mat1.col;
-		unsigned int mat_2_col = mat2.col;
-#pragma omp parallel for simd shared(mat_1_row,mat_1_col,mat_2_col) //collapse(2)
-		for(int i = 0; i < mat_1_row; i++)
+		matrix<U> sol = matrix<U>::zeros(mat1.rows(),mat2.cols());
+#pragma omp parallel for
+		for(int i = 0; i < mat1.row; i++)
 		{
-			for(int j = 0; j < mat_2_col; j++)
+			for(int k = 0; k < mat1.col; k++)
 			{
-				U sum = (U) 0.0;
-				for(int k = 0; k < mat_1_col; k++)
+				U a = mat1.data[i*mat1.col + k];
+				for(int j = 0; j < mat2.col; j++)
 				{
-					sum += mat1.data[i*mat_1_col + k] * mat2.data[j + k*mat_2_col];
+					sol.data[i*sol.col + j] += a*mat2.data[k*mat2.col + j];
 				}
-				sol.data[i*sol.col + j] = sum;
 			}
 		}
 		return sol;
@@ -1254,7 +1295,7 @@ namespace nicole
 		
 		/*Solve the sparse system*/
 		/*Internal part of matrix*/
-#pragma omp parallel for simd
+#pragma omp parallel for
 		for(int i = band_len; i < mat1.row-band_len; i++)
 		{
 			for(int k = i-band_len; k < i+band_len; k++)
@@ -1264,7 +1305,7 @@ namespace nicole
 		}
 		
 		/*Top of the matrix*/
-#pragma omp parallel for simd
+#pragma omp parallel for
 		for(int i = 0; i < band_len; i++)
 		{
 			for(int k = 0; k < i+band_len; k++)
@@ -1274,7 +1315,7 @@ namespace nicole
 		}
 		
 		/*bottom part of the matrix*/
-#pragma omp parallel for simd
+#pragma omp parallel for
 		for(int i = mat1.row-band_len; i < mat1.row; i++)
 		{
 			for(int k = i-band_len; k < mat1.row; k++)
@@ -1290,7 +1331,7 @@ namespace nicole
 	U sum(const matrix<U> &mat)
 	{
 		U s = (U) 0.0;
-#pragma omp parallel for simd reduction(+:s)
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 			{
 				s += mat.data[i];
@@ -1309,12 +1350,12 @@ namespace nicole
 	{
 		U v = (U) 0.0;
 		U m = mean(mat);
-#pragma omp parallel for simd reduction(+:v)
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
-			v += std::pow(mat.data[i] - m,(double)2);
+			v += std::pow(mat.data[i] - m,(U)2);
 		}
-		return v/((U)mat.row*mat.col);
+		return v/((U)mat.row*mat.col - 1);
 	}
 	
 	template<class U>
@@ -1324,13 +1365,69 @@ namespace nicole
 	}
 	
 	template<class U>
+	matrix<U> cov(const matrix<U> &A,const matrix<U> &B)
+	{
+		if((A.numel() != B.numel()) || (!A.is_vector()) || (!B.is_vector())) {std::cout << "Runtime Error\nMatricies not the correct size\n"; exit(1);} else {}
+		U A_mean = mean(A);
+		U B_mean = mean(B);
+		U A_var = var(A);
+		U B_var = var(B);
+		matrix<U> sol = matrix<U>::zeros(2,2);
+		
+		U c = (U) 0;
+
+		for(int i = 0; i < A.numel(); i++)
+		{
+			c += (A.data[i] - A_mean)*(B.data[i] - B_mean);
+		}
+		c /= (U)(A.numel() - 1);
+		
+		sol(0,0) = A_var;
+		sol(0,1) = c;
+		sol(1,0) = c;
+		sol(1,1) = B_var;
+		return sol;
+	}
+	
+	template<class U>
+	matrix<U> cov(const matrix<U> &X)
+	{
+		/*Initalize our covariance matrix*/
+		matrix<U> C = matrix<U>::zeros(X.rows(),X.rows());
+		/*Calculate the means ahead of time*/
+		matrix<U> M = matrix<U>::zeros(X.rows(),1); 
+#pragma omp parallel for
+		for(int i = 0; i < X.rows(); i++)
+		{
+			U m = (U)0;
+			for(int j = 0; j < X.cols(); j++)
+			{
+				m += X(i,j);
+			}
+			M(i) = m/(U)X.cols();
+		}
+#pragma omp parallel for 
+		for(int i = 0; i < X.rows(); i++)
+		{
+			for(int j = 0; j < X.rows(); j++)
+			{
+				for(int k = 0; k < X.cols(); k++)
+				{
+					C(i,j) += (X(i,k) - M(i))*(X(j,k) - M(j));
+				}
+				C(i,j) = C(i,j)/((U)X.cols() - (U)1);
+			}
+		}
+		return C;
+	}
+	
+	template<class U>
 	U max(const matrix<U> &mat)
 	{
-		U m = (U) 0.0;
-#pragma omp parallel for
-		for(int i = 0; i < mat.row*mat.col; i++)
+		U m = mat.data[0];
+		
+		for(int i = 1; i < mat.row*mat.col; i++)
 		{
-#pragma omp critical
 			if(mat.data[i] > m) {m = mat.data[i];} else {}
 		}
 		return m;
@@ -1339,11 +1436,10 @@ namespace nicole
 	template<class U>
 	U min(const matrix<U> &mat)
 	{
-		U m = (U) 10000000000000000 /*Large constant*/;
-#pragma omp parallel for 
-		for(int i = 0; i < mat.row*mat.col; i++)
+		U m = mat.data[0] /*Large constant*/;
+
+		for(int i = 1; i < mat.row*mat.col; i++)
 		{
-#pragma omp critical
 			if(mat.data[i] < m) {m = mat.data[i];} else {}
 		}
 		return m;
@@ -1390,7 +1486,7 @@ namespace nicole
 			gen.col_swap(swap_coe_1,swap_coe_2);
 		}
 		/*Get the size of what we want to return*/
-#pragma omp parallel for simd
+
 		for(int i = 0; i < size; i++)
 		{
 			sol.data[i] = gen.data[i];
@@ -1427,7 +1523,7 @@ namespace nicole
 	{
 		/*If a matrix just creates a bound*/
 		U n = (U) 0.0;
-#pragma omp parallel for simd reduction(+:n)
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			n += std::pow(mat.data[i],(double)2.0);
@@ -1439,7 +1535,7 @@ namespace nicole
 	U p_norm(const matrix<U> &mat,double alpha)
 	{
 		U n = (U) 0.0;
-#pragma omp parallel for simd reduction(+:n)
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			n += std::pow(mat.data[i],alpha);
@@ -1460,7 +1556,7 @@ namespace nicole
 	matrix<U> cos(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::cos(mat.data[i]);
@@ -1472,7 +1568,7 @@ namespace nicole
 	matrix<U> sin(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::sin(mat.data[i]);
@@ -1484,7 +1580,7 @@ namespace nicole
 	matrix<U> tan(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::tan(mat.data[i]);
@@ -1496,7 +1592,7 @@ namespace nicole
 	matrix<U> acos(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::acos(mat.data[i]);
@@ -1508,7 +1604,7 @@ namespace nicole
 	matrix<U> asin(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::asin(mat.data[i]);
@@ -1520,7 +1616,7 @@ namespace nicole
 	matrix<U> atan(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::atan(mat.data[i]);
@@ -1532,7 +1628,7 @@ namespace nicole
 	matrix<U> cosh(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::cosh(mat.data[i]);
@@ -1544,7 +1640,7 @@ namespace nicole
 	matrix<U> sinh(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::sinh(mat.data[i]);
@@ -1556,7 +1652,7 @@ namespace nicole
 	matrix<U> tanh(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::tanh(mat.data[i]);
@@ -1568,7 +1664,7 @@ namespace nicole
 	matrix<U> acosh(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::acosh(mat.data[i]);
@@ -1580,7 +1676,7 @@ namespace nicole
 	matrix<U> asinh(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::asinh(mat.data[i]);
@@ -1592,7 +1688,7 @@ namespace nicole
 	matrix<U> atanh(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::atanh(mat.data[i]);
@@ -1604,7 +1700,7 @@ namespace nicole
 	matrix<U> exp(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::exp(mat.data[i]);
@@ -1616,7 +1712,7 @@ namespace nicole
 	matrix<U> log(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::log(mat.data[i]);
@@ -1628,7 +1724,7 @@ namespace nicole
 	matrix<U> log10(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::log10(mat.data[i]);
@@ -1640,7 +1736,7 @@ namespace nicole
 	matrix<U> log2(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::log2(mat.data[i]);
@@ -1653,7 +1749,7 @@ namespace nicole
 	matrix<U> operator^(const matrix<U> &mat,double alpha)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::pow(mat.data[i],alpha);
@@ -1665,7 +1761,7 @@ namespace nicole
 	matrix<U> operator^(double alpha,const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::pow(alpha,mat.data[i]);
@@ -1677,7 +1773,7 @@ namespace nicole
 	matrix<U> ceil(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::ceil(mat.data[i]);
@@ -1689,7 +1785,7 @@ namespace nicole
 	matrix<U> floor(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::floor(mat.data[i]);
@@ -1701,7 +1797,7 @@ namespace nicole
 	matrix<U> abs(const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = std::abs(mat.data[i]);
@@ -1714,7 +1810,7 @@ namespace nicole
 	matrix<U> diff(const matrix<U> &mat)
 	{
 		matrix<U> d(mat.row,mat.col-1);
-#pragma omp parallel for simd
+
 		for(int i = 1; i < mat.row*(mat.col); i++)
 		{
 			d.data[i-1] = mat.data[i] - mat.data[i-1];
@@ -1728,7 +1824,7 @@ namespace nicole
 	matrix<U> operator+(const matrix<U> &mat,U alpha)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = mat.data[i] + alpha;
@@ -1740,7 +1836,7 @@ namespace nicole
 	matrix<U> operator+(U alpha,const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = mat.data[i] + alpha;
@@ -1752,7 +1848,7 @@ namespace nicole
 	matrix<U> operator-(U alpha,const matrix<U> &mat)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = alpha - mat.data[i];
@@ -1764,7 +1860,7 @@ namespace nicole
 	matrix<U> operator-(const matrix<U> &mat,U alpha)
 	{
 		matrix<U> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			sol.data[i] = mat.data[i] - alpha;
@@ -1775,7 +1871,6 @@ namespace nicole
 	template<class T>
 	matrix<T> & matrix<T>::operator++(void)
 	{
-#pragma omp parallel for simd
 		for(int i = 0; i < row*col; i++)
 		{
 			data[i] += (T)1;
@@ -1788,7 +1883,7 @@ namespace nicole
 	matrix<unsigned int> operator>(const matrix<U> &mat,U alpha)
 	{
 		matrix<unsigned int> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			if(mat.data[i] > alpha) {sol.data[i] = 1;}
@@ -1802,7 +1897,7 @@ namespace nicole
 	matrix<unsigned int> operator>(U alpha,const matrix<U> &mat)
 	{
 		matrix<unsigned int> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			if(alpha > mat.data[i]) {sol.data[i] = 1;}
@@ -1816,7 +1911,7 @@ namespace nicole
 	matrix<unsigned int> operator<(const matrix<U> &mat,U alpha)
 	{
 		matrix<unsigned int> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			if(mat.data[i] < alpha) {sol.data[i] = 1;}
@@ -1830,7 +1925,7 @@ namespace nicole
 	matrix<unsigned int> operator<(U alpha,const matrix<U> &mat)
 	{
 		matrix<unsigned int> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			if(alpha < mat.data[i]) {sol.data[i] = 1;}
@@ -1845,7 +1940,7 @@ namespace nicole
 	matrix<unsigned int> operator>=(const matrix<U> &mat,U alpha)
 	{
 		matrix<unsigned int> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			if(mat.data[i] >= alpha) {sol.data[i] = 1;}
@@ -1859,7 +1954,7 @@ namespace nicole
 	matrix<unsigned int> operator>=(U alpha,const matrix<U> &mat)
 	{
 		matrix<unsigned int> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			if(alpha >= mat.data[i]) {sol.data[i] = 1;}
@@ -1873,7 +1968,7 @@ namespace nicole
 	matrix<unsigned int> operator<=(const matrix<U> &mat,U alpha)
 	{
 		matrix<unsigned int> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			if(mat.data[i] <= alpha) {sol.data[i] = 1;}
@@ -1887,7 +1982,7 @@ namespace nicole
 	matrix<unsigned int> operator<=(U alpha,const matrix<U> &mat)
 	{
 		matrix<unsigned int> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			if(alpha <= mat.data[i]) {sol.data[i] = 1;}
@@ -1901,7 +1996,7 @@ namespace nicole
 	matrix<unsigned int> operator==(const matrix<U> &mat,U alpha)
 	{
 		matrix<unsigned int> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			if(alpha == mat.data[i]) {sol.data[i] = 1;}
@@ -1915,7 +2010,7 @@ namespace nicole
 	matrix<unsigned int> operator==(U alpha,const matrix<U> &mat)
 	{
 		matrix<unsigned int> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			if(alpha == mat.data[i]) {sol.data[i] = 1;}
@@ -1929,7 +2024,7 @@ namespace nicole
 	matrix<unsigned int> operator!=(const matrix<U> &mat,U alpha)
 	{
 		matrix<unsigned int> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			if(alpha == mat.data[i]) {sol.data[i] = 0;}
@@ -1943,7 +2038,7 @@ namespace nicole
 	matrix<unsigned int> operator!=(U alpha,const matrix<U> &mat)
 	{
 		matrix<unsigned int> sol(mat.row,mat.col);
-#pragma omp parallel for simd
+
 		for(int i = 0; i < mat.row*mat.col; i++)
 		{
 			if(alpha == mat.data[i]) {sol.data[i] = 0;}
@@ -1958,7 +2053,7 @@ namespace nicole
 	{
 		/*Initally count number of 1s*/
 		unsigned int count = 0;
-#pragma omp parallel for reduction(+:count)
+
 		for(int i = 0; i < row*col; i++)
 		{
 			if(mat.raw_data()[i] == 0){/*Do nothing*/}
@@ -1975,7 +2070,7 @@ namespace nicole
 		else {sol = matrix<T>::shape(count,1);}
 		//matrix<T> sol(count,1);
 		unsigned int index_ = 0;
-#pragma omp for simd ordered
+
 		for(int i = 0; i < row*col; i++)
 		{
 			if(mat.raw_data()[i] == 0){/*Do nothing*/}
@@ -1991,12 +2086,12 @@ namespace nicole
 	{
 		/*Counts the size*/
 		unsigned int count = 0;
-#pragma omp parallel for simd reduction(+:count)
+
 		for(int i = 0; i < row*col; i++)
 		{
 			if(mat.raw_data()[i] == 0){/*Do nothing*/}
 			else if(mat.raw_data()[i] == 1) {count++;}
-			else {std::cout << "Runtime Error\nInvalid logical 3\n"; exit(1);}
+			else {std::cout << "Runtime Error\nInvalid logical \n"; exit(1);}
 		}
 		/*Checks the count*/
 		if(count == 0) {std::cout << "Runtime Error\nNo element found\n"; exit(1);} else {}
@@ -2004,7 +2099,7 @@ namespace nicole
 		/*Add in indexes*/
 		matrix<unsigned int> sol(count,1);
 		unsigned int index_ = 0;
-#pragma omp for simd ordered 
+
 		for(int i = 0; i < row*col; i++)
 		{
 			if(mat.raw_data()[i] == 0){/*Do nothing*/}
@@ -2013,56 +2108,99 @@ namespace nicole
 		}
 		return sol;
 	}
+	
+	template<class T>
+	matrix<T> & matrix<T>::set_col(unsigned int c,const matrix<T> &M)
+	{
+		if(c < 0 || c >= col || M.rows() > this->rows()) {std::cout << "Runtime Error\nInvlaid index\n"; exit(1);} else {}
+
+		for(int i = 0; i < this->rows(); i++)
+		{
+			data[row*i + c] = M(i);
+		}
+		return *this; 
+	}
+	
+	template<class T>
+	matrix<T> & matrix<T>::set_row(unsigned int r,const matrix<T> &M)
+	{
+		if(r < 0 || r >= this->cols() || M.cols() > this->cols()) {std::cout << "Runtime Error\nInvlaid index\n"; exit(1);} else {}
+
+		for(int i = 0; i < this->cols(); i++)
+		{
+			data[r*row + i] = M(i);
+		}
+		return *this; 
+	}
 }
 
 /*Name declarations*/
 #define mat matrix<double>
 #define fmat matrix<float>
 #define imat matrix<int>
+#define uimat matrix<unsigned int>
 #define hpmat matrix<long double>
+#define bmat matrix<bool>
+
+/*Complex mats*/
+#define cmat matrix<std::complex<double> >
+#define cfmat matrix<std::complex<float> >
+#define cimat matrix<std::complex<int> >
+#define cuimat matrix<std::complex<unsigned int> >
+#define chpmat matrix<std::complex<long double> >
 
 /*function defines*/
 #define drandu matrix<double>::randu
 #define frandu matrix<float>::randu
 #define irandu matrix<int>::randu
+#define uirandu matrix<unsigned int>::randu
 #define hpranu matrix<long double>::randu
 
 #define dzeros matrix<double>::zeros
 #define fzeros matrix<float>::zeros
 #define izeros matrix<int>::zeros
+#define uizeros matrix<unsigned int>::zeros
 #define hpzeros matrix<long double>::zeros
 
 #define dones matrix<double>::ones
 #define fones matrix<float>::ones
 #define iones matrix<int>::ones
+#define uiones matrix<unsigned int>::ones
 #define hpones matrix<long double>::ones
 
 #define dlinspace matrix<double>::linspace
 #define flinspace matrix<float>::linspace
 #define ilinspace matrix<int>::linspace
+#define uilinspace matrix<unsigned int>::linspace
 #define hplinspace matrix<long double>::linspace
 
 #define ddelspace matrix<double>::delspace
 #define fdelspace matrix<float>::delspace
 #define idelspace matrix<int>::delspace
+#define uidelspace matrix<unsigned int>::delspace
 #define hpdelspace matrix<long double>::delspace
 
 #define drandn matrix<double>::randn
 #define frandn matrix<float>::randn
 #define irandn matrix<int>::randn
+#define uirandn matrix<unsigned int>::randn
 #define hprandn matrix<long double>::randn
 
 #define deye matrix<double>::eye
 #define feye matrix<float>::eye
 #define ieye matrix<int>::eye
+#define uieye matrix<unsigned int>::eye
 #define hpeye matrix<long double>::eye
 
 #define dshape matrix<double>::shape
 #define fshape matrix<float>::shape
 #define ishape matrix<int>::shape
+#define uishape matrix<unsigned int>::shape
 #define hpshape matrix<long double>::shape
 
+#define ui unsigned int
 #define hp long double
+#define ll long long
 
 
 
